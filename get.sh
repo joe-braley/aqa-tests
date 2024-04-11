@@ -627,6 +627,17 @@ getVendorTestMaterial() {
 			branchOption="-b $branch"
 		fi
 
+		if [[ "$dir" =~ "jck" ]]; then
+			echo "BUILD_LIST is $BUILD_LIST"
+			if [[ "$BUILD_LIST" =~ "jck" || "$BUILD_LIST" =~ "all" ]]; then
+				echo "Remove existing subdir. $repoURL will be used..."
+				rm -rf jck
+			else
+				echo "Skip git clone $repoURL"
+				continue
+			fi
+		fi
+
 		echo "git clone ${branchOption} $repoURL $dest"
 		git clone -q --depth 1 $branchOption $repoURL $dest
 
@@ -638,6 +649,10 @@ getVendorTestMaterial() {
 			git checkout $sha
 			cd $TESTDIR
 		fi
+
+		echo "check vendor repo sha"
+		repoName=$(basename $repoURL .git)
+		checkRepoSHA $dest $repoName
 
 		# move resources
 		if [ "$dir" != "" ] && [ -d $dest/$dir ]; then
@@ -748,16 +763,21 @@ checkOpenJ9RepoSHA()
 
 parseCommandLineArgs "$@"
 if [ "$USE_TESTENV_PROPERTIES" = true ]; then
+    teFile="./testenv/testenv.properties"
 	if [[ "$PLATFORM" == *"zos"* ]]; then
 		echo "load ./testenv/testenv_zos.properties"
 		source ./testenv/testenv_zos.properties
+		teFile="./testenv/testenv_zos.properties"
 	elif [[ "$PLATFORM" == *"arm"* ]] && [[ "$JDK_VERSION" == "8" ]] ; then
 		echo "load ./testenv/testenv_arm32.properties"
 		source ./testenv/testenv_arm32.properties
+		teFile="./testenv/testenv_arm32.properties"
 	else
 		echo "load ./testenv/testenv.properties"
 		source ./testenv/testenv.properties
 	fi
+	echo "Running checkTags with $teFile and $JDK_VERSION"
+	./scripts/testenv/checkTags.sh $teFile $JDK_VERSION
 else
 	> ./testenv/testenv.properties
 fi

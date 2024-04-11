@@ -176,7 +176,7 @@ timestamps{
                         ['LABEL_ADDITION' : "${commonLabel}&&sw.os.rhel.8&&hw.arch.x86.amd"],
                         ['LABEL_ADDITION' : "${commonLabel}&&sw.os.rhel.8&&hw.arch.x86.skylake"],
                         ['LABEL_ADDITION' : "${commonLabel}&&sw.os.rhel.9&&hw.arch.x86.amd"],
-                        ['LABEL_ADDITION' : "${commonLabel}&&sw.os.rhel.9&&hw.arch.x86.skylake"]
+                        ['LABEL_ADDITION' : "${commonLabel}&&sw.os.rhel.9&&hw.arch.x86.broadwell"]
                     ],
             'aarch64_linux' : [
                         // no machine available ['LABEL_ADDITION' : "${commonLabel}&&sw.os.ubuntu.20"],
@@ -267,7 +267,13 @@ timestamps{
             env.EXTRA_OPTIONS = params.EXTRA_OPTIONS ? params.EXTRA_OPTIONS : ""
             env.BUILD_LIST = params.BUILD_LIST ? params.BUILD_LIST : ""
             SPEC = PLATFORM_MAP[params.PLATFORM]["SPEC"]
-            dockerAgents = PLATFORM_MAP[params.PLATFORM]["DockerAgents"] ? PLATFORM_MAP[params.PLATFORM]["DockerAgents"] : []
+            // Block dockerAgents on adoptium CI for riscv64 until we make it work
+            // This will allow RISC-V test jobs to queue up and not hang
+            if ( env.JENKINS_URL.contains("ci.adoptium.net")) {
+                dockerAgents = null
+            } else {
+                dockerAgents = PLATFORM_MAP[params.PLATFORM]["DockerAgents"] ? PLATFORM_MAP[params.PLATFORM]["DockerAgents"] : []
+            }
             dockerAgentLabel = ''
             if (params.LABEL) {
                 LABEL = params.LABEL
@@ -291,9 +297,9 @@ timestamps{
                 env.EXTRA_OPTIONS += " -Dsemeru.fips=true -Dsemeru.customprofile=${opts}"
             }
 
-            // Temporarily exclude ubuntu 22 machines for criu sanity.external pipeline
-            if (JOB_NAME.contains ("sanity.external") && JOB_NAME.contains("_criu")) {
-                LABEL += "&&!sw.os.ubuntu.22"
+            // Temporarily exclude CentOS 7 machines for sanity.external pipeline due to docker issue
+            if (JOB_NAME.contains ("sanity.external")) {
+                LABEL += "&&!sw.os.cent.7"
             }
 
             if (params.DOCKER_REQUIRED) {

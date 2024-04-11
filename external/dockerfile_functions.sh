@@ -397,8 +397,8 @@ print_criu_install() {
                 "\n\t&& git clone https://github.com/ibmruntimes/criu.git \\" \
                 "\n\t&& cd criu \\" \
                 "\n\t&& git fetch origin \\" \
-                "\n\t&& git reset --hard origin/0.40-release \\" \
-                "\n\t&& make PREFIX=/usr install \\" \
+                "\n\t&& git reset --hard origin/0.44.0-release \\" \
+                "\n\t&& make PREFIX=/usr CONFIG_AMDGPU=n install \\" \
                 "\n\t&& criu -V " \
                 "\n" >> ${file}
 
@@ -500,7 +500,7 @@ print_clone_project() {
     # Cause Test name to be capitalized
     test_tag="$(sanitize_test_names ${test} | tr a-z A-Z)_TAG"
     git_branch_tag="master"
-    if [[ "$test_tag" != *"PORTABLE"* ]]; then
+    if [[ "$test_tag" != *"CRIU"* ]]; then
         git_branch_tag=$test_tag
     fi
 

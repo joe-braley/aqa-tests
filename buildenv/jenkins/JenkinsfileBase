@@ -78,7 +78,7 @@ def setupEnv() {
 	env.TEST_JDK_HOME = "$WORKSPACE/jdkbinary/j2sdk-image"
 	env.JVM_VERSION = params.JVM_VERSION ? params.JVM_VERSION : ""
 	env.JVM_OPTIONS = params.JVM_OPTIONS ? params.JVM_OPTIONS : ""
-        env.APPLICATION_OPTIONS = params.APPLICATION_OPTIONS ? params.APPLICATION_OPTIONS : ""
+	env.APPLICATION_OPTIONS = params.APPLICATION_OPTIONS ? params.APPLICATION_OPTIONS : ""
 	env.EXTRA_DOCKER_ARGS = params.EXTRA_DOCKER_ARGS ? params.EXTRA_DOCKER_ARGS : ""
 	env.OPENJDK_SHA = params.OPENJDK_SHA ? params.OPENJDK_SHA : ""
 	env.OPENLIBERTY_SHA = params.OPENLIBERTY_SHA ? params.OPENLIBERTY_SHA : ""
@@ -104,12 +104,26 @@ def setupEnv() {
 	env.EXIT_FAILURE = params.EXIT_FAILURE ? params.EXIT_FAILURE : false
 	env.EXIT_SUCCESS = params.EXIT_SUCCESS ? params.EXIT_SUCCESS : false
 	NUM_MACHINES = params.NUM_MACHINES ? params.NUM_MACHINES.toInteger() : 1
-	env.LIB_DIR="${WORKSPACE}/../../testDependency/lib"
+	env.LIB_DIR = JOB_NAME.contains("SmokeTests") ? "${WORKSPACE}/../../../../../testDependency/lib" : "${WORKSPACE}/../../testDependency/lib"
+	env.OPENJCEPLUS_GIT_REPO = params.OPENJCEPLUS_GIT_REPO ?: "https://github.com/IBM/OpenJCEPlus.git"
+	env.OPENJCEPLUS_GIT_BRANCH = params.OPENJCEPLUS_GIT_BRANCH ?: "java${params.JDK_VERSION}"
+
+	env.LIGHT_WEIGHT_CHECKOUT = (params.LIGHT_WEIGHT_CHECKOUT == false) ? params.LIGHT_WEIGHT_CHECKOUT : true
+	env.GENERATE_JOBS = params.GENERATE_JOBS ?: false
 
 	if (JOB_NAME.contains("Grinder")) {
 		def currentDate = new Date()
 		def currentDateTime = currentDate.format("yyyyMMddHHmmss", TimeZone.getTimeZone('UTC'))
 		env.TAP_NAME = "${JOB_NAME}_${currentDateTime}.tap"
+		// If personal repo and branch are set, test jobs need to be regenerated (with LIGHT_WEIGHT_CHECKOUT = false)
+		// to take personal repo and branch.
+		// Therefore, set LIGHT_WEIGHT_CHECKOUTto false and GENERATE_JOBS to true.
+		// This is a known Jenkins issue: https://issues.jenkins.io/browse/JENKINS-42971
+		if (!ADOPTOPENJDK_REPO.contains("adoptium/aqa-tests")) {
+			env.LIGHT_WEIGHT_CHECKOUT = false
+			env.GENERATE_JOBS = true
+			echo "ADOPTOPENJDK_REPO is set to personal repo in Grinder. Auto-set LIGHT_WEIGHT_CHECKOUT: ${env.LIGHT_WEIGHT_CHECKOUT} and GENERATE_JOBS: ${env.GENERATE_JOBS}"
+		}
 	} else {
 		env.TAP_NAME = "${JOB_NAME}.tap"
 	}
@@ -386,8 +400,8 @@ def createJob( TEST_JOB_NAME, ARCH_OS ) {
 		templatePath = 'testJobTemplate'
 	}
 
-	if (params.LIGHT_WEIGHT_CHECKOUT) {
-		jobParams.put('LIGHT_WEIGHT_CHECKOUT', params.LIGHT_WEIGHT_CHECKOUT)
+	if (env.LIGHT_WEIGHT_CHECKOUT) {
+		jobParams.put('LIGHT_WEIGHT_CHECKOUT', env.LIGHT_WEIGHT_CHECKOUT)
 	}
 
 	def create = jobDsl targets: templatePath, ignoreExisting: false, additionalParameters: jobParams
@@ -397,33 +411,40 @@ def createJob( TEST_JOB_NAME, ARCH_OS ) {
 def setup() {
 	stage('Setup') {
 		setupEnv()
-
-		if (params.SDK_RESOURCE == 'nightly' && params.CUSTOMIZED_SDK_URL) {
-			// remove single quote to allow variables to be set in CUSTOMIZED_SDK_URL
-			CUSTOMIZED_SDK_URL_OPTION = "-c ${params.CUSTOMIZED_SDK_URL}"
-		} else if (params.CUSTOMIZED_SDK_URL) {
-			SDK_RESOURCE = "customized"
-			CUSTOMIZED_SDK_URL_OPTION = "-c '${params.CUSTOMIZED_SDK_URL}'"
-			if (params.ADDITIONAL_ARTIFACTS_REQUIRED == "RI_JDK") {
-				def server = Artifactory.server params.ARTIFACTORY_SERVER
-				def artifactoryUrl = server.getUrl()
-				def repoForRi = ''
-				def riURL = ''
-				if (params.ARTIFACTORY_REPO.contains(',')) {
-					String[] repos = params.ARTIFACTORY_REPO.split(",")
-					// Assumption: ARTIFACTORY_REPO=X,Y (X=to upload results, Y=to download ri)
-					repoForRi = repos[1].trim()
-					if (!env.SPEC.startsWith('aix') && !env.SPEC.startsWith('zos')) {
-						riURL = "${artifactoryUrl}/${repoForRi}/Latest/${PLATFORM}/${JDK_VERSION}"
+		if (params.CUSTOMIZED_SDK_URL) {
+			if (params.SDK_RESOURCE == 'nightly') {
+				// remove single quote to allow variables to be set in CUSTOMIZED_SDK_URL
+				CUSTOMIZED_SDK_URL_OPTION = "-c ${params.CUSTOMIZED_SDK_URL}"
+			} else if (!params.SDK_RESOURCE || params.SDK_RESOURCE == 'customized') { 
+				SDK_RESOURCE = "customized"
+				CUSTOMIZED_SDK_URL_OPTION = "-c '${params.CUSTOMIZED_SDK_URL}'"
+				if (params.ADDITIONAL_ARTIFACTS_REQUIRED == "RI_JDK") {
+					def server = Artifactory.server params.ARTIFACTORY_SERVER
+					def artifactoryUrl = server.getUrl()
+					def repoForRi = ''
+					def riURL = ''
+					if (params.ARTIFACTORY_REPO.contains(',')) {
+						String[] repos = params.ARTIFACTORY_REPO.split(",")
+						// Assumption: ARTIFACTORY_REPO=X,Y (X=to upload results, Y=to download ri)
+						repoForRi = repos[1].trim()
+						if (!env.SPEC.startsWith('aix') && !env.SPEC.startsWith('zos')) {
+							riURL = "${artifactoryUrl}/${repoForRi}/Latest/${PLATFORM}/${JDK_VERSION}"
+						}
 					}
+					CUSTOMIZED_SDK_URL_OPTION = "-c '${params.CUSTOMIZED_SDK_URL} ${riURL}'"
 				}
-				CUSTOMIZED_SDK_URL_OPTION = "-c '${params.CUSTOMIZED_SDK_URL} ${riURL}'"
+			} else {
+				error("SDK_RESOURCE: ${params.SDK_RESOURCE} and CUSTOMIZED_SDK_URL: ${params.CUSTOMIZED_SDK_URL} combo is not supported!")
 			}
 		} else {
-			CUSTOMIZED_SDK_URL_OPTION = ""
+			if (params.SDK_RESOURCE == 'customized') { 
+				error("SDK_RESOURCE: ${params.SDK_RESOURCE}, please provide CUSTOMIZED_SDK_URL")
+			} else {
+				CUSTOMIZED_SDK_URL_OPTION = ""
+			}
 		}
 
-		if (SDK_RESOURCE == 'upstream' && !params.CUSTOMIZED_SDK_URL) {
+		if (SDK_RESOURCE == 'upstream') {
 			timeout(time: 1, unit: 'HOURS') {
 				dir('jdkbinary') {
 					step([$class: 'CopyArtifact',
@@ -737,7 +758,7 @@ def runTest( ) {
 			echo "ITERATION: ${i}/${ITERATIONS}"
 			if (env.SPEC.contains('linux') && !(LABEL.contains('ci.agent.dynamic') && CLOUD_PROVIDER == 'azure') && (BUILD_LIST != "external")) {
 				// Add an additional 10 second timeout due to issue: https://github.com/adoptium/temurin-build/issues/2368#issuecomment-756683888
-				wrap([$class: 'Xvfb', autoDisplayName: true, timeout:10]) {
+				wrap([$class: 'Xvfb', autoDisplayName: true, timeout:20]) {
 					def DISPLAY = sh (
 							script: 'ps -f  | grep \'[X]vfb\' | awk \'{print \$9}\'',
 							returnStdout: true
@@ -842,8 +863,6 @@ def post(output_name) {
 
 		step([$class: "TapPublisher", testResults: "aqa-tests/TKG/**/*.tap", outputTapToConsole: false, failIfNoResults: true])
 
-		junit allowEmptyResults: true, keepLongStdio: true, testResults: '**/work/**/*.jtr.xml, **/result/**/*.jtr.xml, **/junitreports/**/*.xml, **/external_test_reports/**/*.xml'
-
 		//call the archive function for each file
 		archiveFile("aqa-tests/testenv/testenv.properties", true)
 		archiveFile("aqa-tests/TKG/**/*.tap", true)
@@ -923,7 +942,14 @@ def post(output_name) {
 				uploadToArtifactory(pattern)
 			}
 		}
+
 		addFailedTestsGrinderLink()
+
+		try {
+			junit allowEmptyResults: true, keepLongStdio: true, testResults: '**/work/**/*.jtr.xml, **/result/**/*.jtr.xml, **/junitreports/**/*.xml, **/external_test_reports/**/*.xml'
+		} catch (Exception e) {
+			echo "Caught exception: ${e.message}"
+		}
 	}
 }
 
@@ -1167,6 +1193,9 @@ def addGrinderLink() {
 		url = url.replace(rerunIterations,"RERUN_ITERATIONS=0")
 	}
 
+	// reset LIGHT_WEIGHT_CHECKOUT to false in Rerun in Grinder link
+	url = url.replace("LIGHT_WEIGHT_CHECKOUT=true", "LIGHT_WEIGHT_CHECKOUT=false")
+
 	currentBuild.description += "<br><a href=\"https://github.com/adoptium/aqa-tests/wiki/How-to-Run-a-Grinder-Build-on-Jenkins\">Grinder Wiki</a>"
 	echo "Rerun in Grinder: ${url}"
 	currentBuild.description += "<br><a href=${url}>Rerun in Grinder</a> Change TARGET to run only the failed test targets."
@@ -1180,6 +1209,9 @@ def addFailedTestsGrinderLink(paths=""){
 		def failedTestList = ""
 		def jdkFailedTestCaseList = ""
 		def hotspotFailedTestCaseList = ""
+		def jckRuntimeFailedTestCaseList = ""
+		def jckCompilerFailedTestCaseList = ""
+		def jckDevtoolsFailedTestCaseList = ""
 		List<String> buildPaths = paths.split(',')
 		for (def buildPath: buildPaths) {
 			def tapFiles = findFiles(glob: "${buildPath}**/*.tap")
@@ -1192,16 +1224,20 @@ def addFailedTestsGrinderLink(paths=""){
 					if (!testSet.getTestResult(i).getStatus().toString().equals("ok")) {
 						def failedtest = testSet.getTestResult(i).getDescription().trim().substring(2)
 						failedTestList += "${failedtest},"
-						if (env.BUILD_LIST.contains('openjdk')) {
+						if (env.BUILD_LIST.contains('openjdk') || env.BUILD_LIST.contains('jck')) {
 							def failedTestCasesInfo = testSet.getTestResult(i).getDiagnostic().get("output").toString()
 							if (failedTestCasesInfo.contains("Failed test cases:") && failedTestCasesInfo.contains("Test results:")) {
 								failedTestCasesInfo = failedTestCasesInfo.substring(failedTestCasesInfo.indexOf('TEST:'))
 								failedTestCasesInfo = failedTestCasesInfo.substring(0, failedTestCasesInfo.indexOf('Test results:'))
 								failedTestCasesInfo = failedTestCasesInfo.split("\\n").join(" ").replaceAll("TEST: ", "")
-								// Remove #id suffixed to the openjdk testcase name. Jtreg doesn't work with it.
-								failedTestCasesInfo = failedTestCasesInfo.replaceAll(/#id\d{1,}/, "")
 								if (failedtest.startsWith("jdk_")) {
 									jdkFailedTestCaseList += "${failedTestCasesInfo} "
+								} else if (failedtest.startsWith("jck-runtime") || failedtest.startsWith("jckruntime")) {
+									jckRuntimeFailedTestCaseList += "${failedTestCasesInfo} "
+								} else if (failedtest.startsWith("jck-compiler") || failedtest.startsWith("jckcompiler")) {
+									jckCompilerFailedTestCaseList += "${failedTestCasesInfo} "
+								} else if (failedtest.startsWith("jck-devtools") || failedtest.startsWith("jckdevtools")) {
+									jckDevtoolsFailedTestCaseList += "${failedTestCasesInfo} "
 								} else {
 									hotspotFailedTestCaseList += "${failedTestCasesInfo} "
 								}
@@ -1226,9 +1262,18 @@ def addFailedTestsGrinderLink(paths=""){
 			if (hotspotFailedTestCaseList) {
 				customizedTestCases['hotspot'] = "${hotspotFailedTestCaseList}"
 			}
+			if (jckRuntimeFailedTestCaseList) {
+				customizedTestCases['jckruntime'] = "${jckRuntimeFailedTestCaseList}"
+			}
+			if (jckCompilerFailedTestCaseList) {
+				customizedTestCases['jckcompiler'] = "${jckCompilerFailedTestCaseList}"
+			}
+			if (jckDevtoolsFailedTestCaseList) {
+				customizedTestCases['jckdevtools'] = "${jckDevtoolsFailedTestCaseList}"
+			}
 			customizedTestCases.each { target, testcases ->
 				def tempTestCases = testcases.substring(0, testcases.length() - 1)
-				tempTestCases = tempTestCases.split(' ').toUnique().join('+')
+				tempTestCases = URLEncoder.encode(tempTestCases.toString(), "UTF-8")
 				def customURL = url.replace(env.FAILED_TEST_TARGET, "TARGET=${target}_custom")
 				customURL = customURL.replace(env.CUSTOM_TARGET_KEY_VALUE, "CUSTOM_TARGET=$tempTestCases")
 				echo "Rerun failed ${target} test cases in Grinder with ${target}_custom target: ${customURL}"
@@ -1240,7 +1285,7 @@ def addFailedTestsGrinderLink(paths=""){
 
 def generateJob (newJobs, childTest, testJobName) {
 	// If GENERATE_JOBS is set to true, force generate the child job. Otherwise, only generate the child job if it does not exist
-	if (params.GENERATE_JOBS) {
+	if (env.GENERATE_JOBS) {
 		newJobs[childTest] = {
 			echo "GENERATE_JOBS is set to true, set test job ${testJobName} params for generating the job"
 			createJob(testJobName, PLATFORM)
