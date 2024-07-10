@@ -218,13 +218,13 @@
 					<isset property="OPENJDK_SHA_ISSET"/>
 					<then>
 						<getFileWithRetry file="openjdk-jdk" command="git clone -q ${REFERENCE_REPO} ${defaultBranch} ${regressionRepo} openjdk-jdk"/>
-						<exec executable="git" failonerror="true" dir="openjdk-jdk" depends="findCygwinDir">
+						<exec executable="git" failonerror="true" dir="openjdk-jdk">
 							<arg line="checkout ${env.OPENJDK_SHA}"/>
 						</exec>
 					</then>
 					<else>
 						<antcall target="findCygwinDir"/>
-						<getFileWithRetry file="openjdk-jdk" command="git clone --depth 1 -q ${REFERENCE_REPO} ${defaultBranch} ${regressionRepo} openjdk-jdk" depends="findCygwinDir"/>
+						<getFileWithRetry file="openjdk-jdk" command="git clone --depth 1 -q ${REFERENCE_REPO} ${defaultBranch} ${regressionRepo} openjdk-jdk" />
 					</else>
 				</if>
 			</else>
