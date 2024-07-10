@@ -223,6 +223,7 @@
 						</exec>
 					</then>
 					<else>
+						<antcall target="findCygwinDir"/>
 						<getFileWithRetry file="openjdk-jdk" command="git clone --depth 1 -q ${REFERENCE_REPO} ${defaultBranch} ${regressionRepo} openjdk-jdk" depends="findCygwinDir"/>
 					</else>
 				</if>
