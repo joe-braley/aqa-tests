@@ -48,7 +48,7 @@
 		</if>
 	</target>
 	<target name="clone_stf">
-		<getFileWithRetry file="STF" command="git clone -q ${stf_repo}" dest="${SYSTEMTEST_ROOT}"/>
+		<getFileWithRetry file="STF" command="git clone -q ${stf_repo}" dest="${SYSTEMTEST_ROOT}"  depends="findCygwinDir"/>
 		<echo message="git rev-parse ${stf_branch} "/>
 		<exec executable="git" failonerror="false" dir="${SYSTEMTEST_ROOT}/STF" outputproperty="stf_sha1" resultproperty="code">
 			<arg value="rev-parse"/>
@@ -116,7 +116,7 @@
 		<addTestenvProperties repoDir="${SYSTEMTEST_ROOT}/STF" repoName="STF"/>
 	</target>
 	<target name="clone_systemtest">
-		<getFileWithRetry file="aqa-systemtest" command="git clone -q ${openjdk_systemtest_repo}" dest="${SYSTEMTEST_ROOT}"/>
+		<getFileWithRetry file="aqa-systemtest" command="git clone -q ${openjdk_systemtest_repo}" dest="${SYSTEMTEST_ROOT}"  depends="findCygwinDir"/>
 		<echo message="git rev-parse ${openjdk_systemtest_branch} "/>
 		<exec executable="git" failonerror="false" dir="${SYSTEMTEST_ROOT}/aqa-systemtest" outputproperty="openjdk_systemtest_sha1" resultproperty="code">
 			<arg value="rev-parse"/>
