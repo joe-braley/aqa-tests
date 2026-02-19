@@ -215,17 +215,6 @@ echo "--------------------------------------------------------------------------
 cat player.properties
 echo "---------------------------------------------------------------------------"
 
-echo "Starting player in background with RMI..."
-$ARCTIC_JDK -Darctic.scope=$VERSION -Darctic.logLevel=TRACE -jar ${LIB_DIR}/arctic.jar -p &
-rc=$?
-if [ $rc -ne 0 ]; then
-   echo "Unable to start Arctic player, rc=$rc"
-   if [[ -n $twm_pid ]]; then
-     kill $twm_pid 2>/dev/null
-   fi
-   exit $rc
-fi
-
 # Sleep longer for Arctic RMI to start up...
 sleep $SLEEP_TIME
 sleep $SLEEP_TIME
@@ -252,6 +241,19 @@ for ARCTIC_GROUP in $ARCTIC_GROUPS; do
     TEST_JSON_FILES=$(find ${START_DIR} -type f -name 'Test.json' -o -name 'Test.link')
     for f in $TEST_JSON_FILES
     do
+
+      echo "Starting player in background with RMI..."
+      $ARCTIC_JDK -Darctic.scope=$VERSION -Darctic.logLevel=TRACE -jar ${LIB_DIR}/arctic.jar -p &
+      rc=$?
+      if [ $rc -ne 0 ]; then
+        echo "Unable to start Arctic player, rc=$rc"
+        if [[ -n $twm_pid ]]; then
+          kill $twm_pid 2>/dev/null
+        fi
+        exit $rc
+      fi
+      sleep 5
+
       f=$(echo "$f" | sed 's#//#/#g')
       echo "Test file: ${f}"
 
@@ -442,13 +444,14 @@ for ARCTIC_GROUP in $ARCTIC_GROUPS; do
           fi
         fi
       fi
+
+      echo "Terminating Arctic CLI..."
+      ${ARCTIC_JDK} -jar ${LIB_DIR}/arctic.jar -c terminate
+  
     done
   fi
  done
 done
-
-echo "Terminating Arctic CLI..."
-${ARCTIC_JDK} -jar ${LIB_DIR}/arctic.jar -c terminate
 
 if [[ -n $twm_pid ]]; then
   kill $twm_pid 2>/dev/null
